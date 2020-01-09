@@ -1,84 +1,58 @@
+mod commands;
+
 #[macro_use]
 extern crate log;
 extern crate env_logger;
 extern crate chrono;
+extern crate serenity;
 
-use chrono::{NaiveTime, Timelike};
+use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+
 use serenity::{
     Client,
+    client::bridge::gateway::{ShardManager},
+    framework::standard::{
+        macros::group,
+        DispatchError, StandardFramework, 
+    },
     model::{channel::Message, gateway::Ready, event::ResumedEvent},
     prelude::*,
     Result as SerenityResult,
 };
 
+// A container type is created for inserting into the Client's `data`, which
+// allows for data to be accessible across all events and framework commands, or
+// anywhere else that has a copy of the `data` Arc.
+struct ShardManagerContainer;
+
+impl TypeMapKey for ShardManagerContainer {
+    type Value = Arc<Mutex<ShardManager>>;
+}
+
+struct CommandCounter;
+
+impl TypeMapKey for CommandCounter {
+    type Value = HashMap<String, u64>;
+}
+
+use commands::{
+    ping::*,
+    say::*,
+    time::*,
+};
+
+group!({
+    name: "general",
+    options: {},
+    commands: [ping, say, time],
+  });
+  
+
+
 struct Handler;
 
 impl EventHandler for Handler {
-    // Set a handler for the `message` event - so that whenever a new message
-    // is received - the closure (or function) passed will be called.
-    //
-    // Event handlers are dispatched through a threadpool, and so multiple
-    // events can be dispatched simultaneously.
-    fn message(&self, ctx: Context, msg: Message) {
-
-        if msg.author.bot {
-            return;
-        }
-
-        debug!("Shard : {:?}", ctx.shard_id);
-        debug!("Message received: {:?}", msg);
-
-        //if msg.author.id == 
-        if msg.content.starts_with("!ping") {
-            // Sending a message can fail, due to a network error, an
-            // authentication error, or lack of permissions to post in the
-            // channel, so log to stdout when some error happens, with a
-            // description of it.
-            check_sending_message(msg.channel_id.say(&ctx.http, "Pong!"))
-        }
-
-        if msg.content.starts_with("!time") {
-            let mut iter = msg.content.split_whitespace();
-            let _z = iter.next(); // first values is the command "!time"
-            if let Some(v) = iter.next() {
-                match v.parse::<i32>() {
-                    Ok(mut int_value) => {
-                        //let mut my_int = int_value;
-
-                        // safeguard zero or below
-                        if int_value < 0 {
-                            check_sending_message(msg.channel_id.say(&ctx.http, "Supplied argument for seconds is two low!"));
-                            return;
-                        }
-
-                        // safeguard max 3600
-                        if int_value >3600 {
-                            check_sending_message(msg.channel_id.say(&ctx.http, "Supplied argument for seconds is above max of 3600!"));
-                            return;
-                        }
-
-
-                        while int_value >= 0 {
-                            let t = NaiveTime::from_num_seconds_from_midnight(int_value as u32, 0);
-                            let send_text = format!("COUNTDOWN: {} sec(s) - ({}h{}m{}s)", int_value, t.hour(), t.minute(), t.second());
-                            check_sending_message(msg.channel_id.say(&ctx.http, send_text));
-
-                            if int_value == 0 {
-                                let boom = vec!["D:/Code/rust/m-bot/resources/gif/boom.gif"];
-                                check_sending_message(msg.channel_id.send_files(&ctx.http, boom, |m| { m.content("") }));
-                                return;
-                            }
-
-                            int_value = int_value - 1;
-                            std::thread::sleep(std::time::Duration::from_millis(1000));
-                        }
-                    },
-                    Err(_) => check_sending_message(msg.channel_id.say(&ctx.http, "Supplied argument for seconds must be present and an integer number above zero."))
-                }
-            }
-        }
-    }
-
     // Set a handler to be called on the `ready` event. This is called when a
     // shard is booted, and a READY payload is sent by Discord. This payload
     // contains data like the current user's guild Ids, current user data,
@@ -111,6 +85,68 @@ fn main() {
     // automatically prepend your bot token with "Bot ", which is a requirement
     // by Discord for bot users.
     let mut client = Client::new(&token, Handler).expect("Err creating client");
+    
+    {
+        let mut data = client.data.write();
+        data.insert::<ShardManagerContainer>(Arc::clone(&client.shard_manager));
+    }
+
+    // We will fetch your bot's owners and id
+    let (owners, bot_id) = match client.cache_and_http.http.get_current_application_info() {
+        Ok(info) => {
+            let mut owners = HashSet::new();
+            owners.insert(info.owner.id);
+    
+            (owners, info.id)
+        },
+        Err(why) => panic!("Could not access application info: {:?}", why),
+    };
+
+    // Commands are equivalent to:
+    // "~about"
+    // "~emoji cat"
+    // "~emoji dog"
+    // "~multiply"
+    // "~ping"
+    // "~some long command"
+    client.with_framework(
+        // Configures the client, allowing for options to mutate how the
+        // framework functions.
+        //
+        // Refer to the documentation for
+        // `serenity::ext::framework::Configuration` for all available
+        // configurations.
+        StandardFramework::new()
+            .configure(|c| c
+                .with_whitespace(true)
+                .on_mention(Some(bot_id))
+                .prefix(".")
+                // Sets the bot's owners. These will be used for commands that
+                // are owners only.
+                .owners(owners)
+            )
+        // Set a function that's called whenever an attempted command-call's
+        // command could not be found.
+        .unrecognised_command(|_, _, unknown_command_name| {
+            println!("Could not find command named '{}'", unknown_command_name);
+        })
+        // Set a function that's called whenever a message is not a command.
+        .normal_message(|_, message| {
+            println!("Message is not a command '{}'", message.content);
+        })
+        // Set a function that's called whenever a command's execution didn't complete for one
+        // reason or another. For example, when a user has exceeded a rate-limit or a command
+        // can only be performed by the bot owner.
+        .on_dispatch_error(|ctx, msg, error| {
+            if let DispatchError::Ratelimited(seconds) = error {
+                let _ = msg.channel_id.say(&ctx.http, &format!("Try this again in {} seconds.", seconds));
+            }
+        })
+        // The `#[group]` macro generates `static` instances of the options set for the group.
+        // They're made in the pattern: `#name_GROUP` for the group instance and `#name_GROUP_OPTIONS`.
+        // #name is turned all uppercase
+        .group(&GENERAL_GROUP)
+    );
 
     // Finally, start a single shard, and start listening to events.
     //

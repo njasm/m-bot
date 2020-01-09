@@ -7,9 +7,11 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serenity = "0.7"
-
 log = "0.4"
 env_logger = "0.7"
 chrono = "0.4.10"
+
+[dependencies.serenity]
+features = ["builder", "cache", "client", "framework", "gateway", "http", "model", "standard_framework", "utils", "voice", "rustls_backend"]
+version = "0.7"
 
