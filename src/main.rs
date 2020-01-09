@@ -105,7 +105,7 @@ fn main() {
     info!("Hello, world!");
 
     // bot token
-    let token = "NjU0MDI3NjE4NzE4MzE4NTky.XglZeQ.vWYITO7HDhXi-G_dqWs9q4OAA0E";
+    let token = std::env::var("BOT_TOKEN").expect("BOT_TOKEN ENV VAR NOT FOUND");
 
     // Create a new instance of the Client, logging in as a bot. This will
     // automatically prepend your bot token with "Bot ", which is a requirement
