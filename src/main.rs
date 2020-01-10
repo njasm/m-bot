@@ -7,17 +7,34 @@ extern crate chrono;
 extern crate serenity;
 
 use std::sync::Arc;
-use std::collections::{HashMap, HashSet};
+use std::collections::{
+    HashMap, 
+    HashSet
+};
 
 use serenity::{
+    prelude::*,
     Client,
-    client::bridge::gateway::{ShardManager},
+    model::{
+        id::UserId,
+        channel::Message, 
+        gateway::Ready, 
+        event::ResumedEvent,
+    },
+    client::bridge::{
+        gateway::ShardManager,
+        voice::ClientVoiceManager,
+    },
     framework::standard::{
-        macros::group,
+        Args,
+        CommandGroup,
+        CommandResult,
+
+        HelpOptions, 
+        help_commands,
+        macros::{group, command},
         DispatchError, StandardFramework, 
     },
-    model::{channel::Message, gateway::Ready, event::ResumedEvent},
-    prelude::*,
     Result as SerenityResult,
 };
 
@@ -30,25 +47,32 @@ impl TypeMapKey for ShardManagerContainer {
     type Value = Arc<Mutex<ShardManager>>;
 }
 
-struct CommandCounter;
+struct VoiceManager;
 
-impl TypeMapKey for CommandCounter {
-    type Value = HashMap<String, u64>;
+impl TypeMapKey for VoiceManager {
+    type Value = Arc<Mutex<ClientVoiceManager>>;
 }
 
 use commands::{
     ping::*,
     say::*,
     time::*,
+    shard::*,
+    voice::*,
 };
 
 group!({
     name: "general",
     options: {},
-    commands: [ping, say, time],
+    commands: [ping, say, time, latency],
   });
   
-
+  group!({
+    name: "voice",
+    options: {},
+    commands: [join, leave, mute, unmute, deafen, undeafen, play, vplay],
+  });
+  
 
 struct Handler;
 
@@ -72,6 +96,7 @@ impl EventHandler for Handler {
     }
 }
 
+
 fn main() {
 
     std::env::set_var("RUST_LOG", "m_bot");
@@ -89,6 +114,7 @@ fn main() {
     {
         let mut data = client.data.write();
         data.insert::<ShardManagerContainer>(Arc::clone(&client.shard_manager));
+        data.insert::<VoiceManager>(Arc::clone(&client.voice_manager));
     }
 
     // We will fetch your bot's owners and id
@@ -120,7 +146,7 @@ fn main() {
             .configure(|c| c
                 .with_whitespace(true)
                 .on_mention(Some(bot_id))
-                .prefix(".")
+                .prefix("&")
                 // Sets the bot's owners. These will be used for commands that
                 // are owners only.
                 .owners(owners)
@@ -146,6 +172,7 @@ fn main() {
         // They're made in the pattern: `#name_GROUP` for the group instance and `#name_GROUP_OPTIONS`.
         // #name is turned all uppercase
         .group(&GENERAL_GROUP)
+        .group(&VOICE_GROUP)
     );
 
     // Finally, start a single shard, and start listening to events.
