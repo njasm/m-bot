@@ -1,4 +1,6 @@
+.vs/
 .idea
 .vscode
+.cargo
 /target
 **/*.rs.bk
