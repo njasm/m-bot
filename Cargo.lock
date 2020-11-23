@@ -1555,9 +1555,9 @@ checksum = "bfa8506c1de11c9c4e4c38863ccbe02a305c8188e85a05a784c9e11e1c3910c8"
 
 [[package]]
 name = "sample"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc0966ad788ec7289562643e05c611b7853e0618b7f9306aafd2fc727abfe168"
+checksum = "36ba94921dc69eb59cf881cda681c5556026835c83ca5a7663947557fafe7402"
 
 [[package]]
 name = "schannel"
