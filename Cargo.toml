@@ -19,5 +19,5 @@ tiny_http = "0.7.0"
 
 [dependencies.serenity]
 features = ["builder", "cache", "client", "framework", "gateway", "http", "model", "standard_framework", "utils", "voice", "rustls_backend"]
-version = "0.7.4"
+version = "0.9.1"
 
